@@ -1,6 +1,6 @@
 # PIP-OS
 
-A green phosphor interface for the Raspberry P, in the shape of a Fallout 3 / New Vegas Pip-Boy 3000. The screen has three modes:
+A green phosphor interface for the Raspberry Pi, in the shape of a Fallout 3 / New Vegas Pip-Boy 3000. The screen has three modes:
 
 - **STAT** — machine condition (CPU, temperature, memory, disk, network, load) and S.P.E.C.I.A.L. traits derived from the hardware.
 - **INV** — the home directory as an inventory. Read only. Hidden files stay hidden.
