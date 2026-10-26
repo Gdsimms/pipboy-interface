@@ -435,6 +435,140 @@ document.body.addEventListener("click", async (event) => {
   }
 });
 
+// labwc hides layer-shell "top" surfaces, including squeekboard, while Chromium
+// is fullscreen. This keyboard is drawn in the page so a finger can still type.
+const KEY_ROWS = {
+  letters: [
+    [..."qwertyuiop"],
+    [..."asdfghjkl"],
+    ["shift", ..."zxcvbnm", "back"],
+    ["nums", "space", ".", "-", "hide"],
+  ],
+  nums: [
+    [..."1234567890"],
+    ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""],
+    ["letters", ",", "'", "?", "!", "+", "=", "back"],
+    ["letters", "space", ".", "-", "hide"],
+  ],
+};
+const KEY_LABEL = {
+  shift: () => (caps ? "CAPS" : "SHIFT"),
+  back: () => "DEL",
+  space: () => "SPACE",
+  hide: () => "HIDE",
+  nums: () => "123",
+  letters: () => "ABC",
+};
+
+let caps = false;
+let keyLayout = "letters";
+let lastField = null;
+state.keys = false;
+
+function isField(el) {
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA") && !el.readOnly && !el.disabled;
+}
+
+function field() {
+  if (isField(document.activeElement)) return document.activeElement;
+  if (isField(lastField) && document.contains(lastField)) return lastField;
+  return null;
+}
+
+function renderKeys() {
+  const board = $("keyboard");
+  board.innerHTML = KEY_ROWS[keyLayout].map((row) => `
+    <div class="osk-row">${row.map((key) => {
+      const label = KEY_LABEL[key] ? KEY_LABEL[key]() : (caps ? key.toUpperCase() : key);
+      const cls = [KEY_LABEL[key] ? "fn" : "", key === "space" ? "wide" : "", key === "shift" && caps ? "on" : ""].filter(Boolean).join(" ");
+      return `<button type="button" data-key="${esc(key)}" class="${cls}">${esc(label)}</button>`;
+    }).join("")}</div>`).join("");
+}
+
+function placeCaret(el, value, caret) {
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement;
+  Object.getOwnPropertyDescriptor(proto.prototype, "value").set.call(el, value);
+  const pos = Math.max(0, Math.min(caret, value.length));
+  el.setSelectionRange(pos, pos);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function insertText(text) {
+  const el = field();
+  if (!el) return;
+  el.focus();
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? start;
+  placeCaret(el, el.value.slice(0, start) + text + el.value.slice(end), start + text.length);
+}
+
+function backspace() {
+  const el = field();
+  if (!el) return;
+  el.focus();
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? start;
+  if (start !== end) placeCaret(el, el.value.slice(0, start) + el.value.slice(end), start);
+  else if (start > 0) placeCaret(el, el.value.slice(0, start - 1) + el.value.slice(end), start - 1);
+}
+
+function pressKey(key) {
+  if (key === "hide") {
+    setKeyboard(false);
+    return;
+  }
+  if (key === "shift") {
+    caps = !caps;
+    renderKeys();
+    return;
+  }
+  if (key === "nums" || key === "letters") {
+    keyLayout = key === "nums" ? "nums" : "letters";
+    renderKeys();
+    return;
+  }
+  if (key === "back") {
+    backspace();
+    return;
+  }
+  insertText(key === "space" ? " " : (caps && keyLayout === "letters" ? key.toUpperCase() : key));
+}
+
+function setKeyboard(open) {
+  state.keys = open;
+  $("keyboard").hidden = !open;
+  const button = $("key");
+  button.classList.toggle("on", open);
+  button.setAttribute("aria-pressed", open ? "true" : "false");
+  const el = field();
+  if (open && el) el.focus();
+  requestAnimationFrame(() => {
+    if (map) map.invalidateSize();
+    if (open && el) el.scrollIntoView({ block: "center" });
+  });
+}
+
+document.addEventListener("focusin", (event) => {
+  if (!isField(event.target)) return;
+  lastField = event.target;
+  if (state.keys) requestAnimationFrame(() => event.target.scrollIntoView({ block: "center" }));
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (event.target.closest("#keyboard [data-key], #key")) event.preventDefault();
+});
+
+document.addEventListener("pointerup", (event) => {
+  const key = event.target.closest("#keyboard [data-key]");
+  if (key) {
+    pressKey(key.dataset.key);
+    return;
+  }
+  if (event.target.closest("#key")) setKeyboard(!state.keys);
+});
+
+renderKeys();
+
 document.body.addEventListener("submit", async (event) => {
   const form = event.target;
   if (form.id === "new-quest") {

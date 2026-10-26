@@ -998,6 +998,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", MIME.get(file.suffix.lower(), "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
         self.send_header("X-Content-Type-Options", "nosniff")
+        if file.suffix.lower() in {".html", ".css", ".js"}:
+            self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 

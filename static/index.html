@@ -7,7 +7,7 @@
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="/fonts/sharetechmono.css">
 <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/app.css?v=3">
 </head>
 <body>
   <div id="boot" class="boot">
@@ -18,13 +18,17 @@
   <div id="app" class="screen" hidden>
     <header class="top">
       <div class="brand">PIP-OS V0.1 · <b id="host">UNIT</b></div>
-      <div class="clock" id="clock"></div>
+      <div class="side">
+        <button type="button" id="key" class="key" aria-pressed="false">KEY</button>
+        <div class="clock" id="clock"></div>
+      </div>
     </header>
     <nav id="modes" class="modes"></nav>
     <nav id="subs" class="subs"></nav>
     <main id="view"></main>
+    <div id="keyboard" class="osk" hidden></div>
   </div>
   <script src="/vendor/leaflet/leaflet.js?v=2"></script>
-  <script src="/app.js?v=2"></script>
+  <script src="/app.js?v=3"></script>
 </body>
 </html>
