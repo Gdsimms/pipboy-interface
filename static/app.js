@@ -1,3 +1,4 @@
+const QUEST_TEXT = 400;
 const MODES = {
   stat: ["STATUS", "S.P.E.C.I.A.L."],
   inv: ["ALL", "NOTES", "PICS", "HOLO", "OTHER"],
@@ -210,9 +211,10 @@ function questView() {
         <p>${quest.done ? "COMPLETE" : "ACTIVE"}</p>
         <div class="compose">
           <button type="button" data-toggle="${esc(quest.id)}">${quest.done ? "REOPEN" : "COMPLETE"}</button>
+          ${quest.done ? `<button type="button" class="quiet" data-remove="${esc(quest.id)}">REMOVE</button>` : ""}
         </div>
         <form class="compose" data-objective="${esc(quest.id)}">
-          <input name="text" placeholder="OBJECTIVE" autocomplete="off" maxlength="80">
+          <input name="text" placeholder="OBJECTIVE" autocomplete="off" maxlength="${QUEST_TEXT}">
           <button type="submit">ADD</button>
         </form>
       </div>
@@ -221,7 +223,7 @@ function questView() {
 }
 
 function questForm() {
-  return `<form class="compose" id="new-quest"><input name="name" placeholder="NEW QUEST" autocomplete="off" maxlength="80"><button type="submit">ADD</button></form>`;
+  return `<form class="compose" id="new-quest"><input name="name" placeholder="NEW QUEST" autocomplete="off" maxlength="${QUEST_TEXT}"><button type="submit">ADD</button></form>`;
 }
 
 function gpsLine(gps) {
@@ -381,6 +383,7 @@ document.body.addEventListener("click", async (event) => {
   const path = event.target.closest("[data-path]");
   const quest = event.target.closest("[data-quest]");
   const toggle = event.target.closest("[data-toggle]");
+  const remove = event.target.closest("[data-remove]");
   const tune = event.target.closest("[data-tune]");
   const listen = event.target.closest("[data-listen]");
   if (mode) {
@@ -409,6 +412,15 @@ document.body.addEventListener("click", async (event) => {
       body: JSON.stringify({ op: "toggle", id: toggle.dataset.toggle }),
     });
     state.quests = data.quests;
+    draw();
+  } else if (remove) {
+    const data = await api("/api/quests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "remove", id: remove.dataset.remove }),
+    });
+    state.quests = data.quests;
+    if (!state.quests.some((item) => item.id === state.questId)) state.questId = state.quests[0]?.id || null;
     draw();
   } else if (tune) {
     const next = Math.round((state.radio.freq + Number(tune.dataset.tune)) * 10) / 10;

@@ -203,6 +203,7 @@ main { flex: 1; min-height: 0; overflow: auto; }
 .eff { margin-top: 8px; font-size: 14px; color: var(--mid); }
 .special .row { grid-template-columns: 22px 1fr auto; margin-bottom: 4px; }
 .list { min-width: 0; overflow: auto; max-height: 100%; }
+.list button, .crumb button, .detail h3, .detail div { overflow-wrap: anywhere; }
 .list button, .crumb button {
   text-align: left;
   width: 100%;
@@ -257,6 +258,10 @@ main { flex: 1; min-height: 0; overflow: auto; }
   padding: 8px 12px;
   letter-spacing: .12em;
   color: var(--bright);
+}
+.compose button.quiet {
+  border-color: #3f7a4e;
+  color: #8dffb0;
 }
 .freq {
   font-size: 42px;

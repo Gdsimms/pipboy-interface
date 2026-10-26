@@ -29,6 +29,7 @@ STATIC = ROOT / "static"
 WBFM = ROOT / "deploy" / "wbfm"
 DATA_DIR = Path.home() / ".local" / "share" / "pipboy"
 QUESTS_PATH = DATA_DIR / "quests.json"
+QUEST_TEXT = 400
 HOST = socket.gethostname().split(".")[0].upper()
 
 SDR_IDS = {
@@ -509,7 +510,7 @@ def mutate_quests(body: dict) -> list[dict]:
     op = body.get("op")
     if op == "add":
         name = str(body.get("name", "")).strip()
-        if not name or len(name) > 80:
+        if not name or len(name) > QUEST_TEXT:
             raise ValueError("name")
         quests.insert(0, {"id": uuid.uuid4().hex[:8], "name": name, "done": False, "objectives": []})
     elif op == "toggle":
@@ -519,10 +520,18 @@ def mutate_quests(body: dict) -> list[dict]:
         for quest in quests:
             if quest["id"] == target:
                 quest["done"] = not quest["done"]
+    elif op == "remove":
+        target = str(body.get("id", ""))
+        match = next((quest for quest in quests if quest["id"] == target), None)
+        if match is None:
+            raise ValueError("id")
+        if not match.get("done"):
+            raise ValueError("active")
+        quests = [quest for quest in quests if quest["id"] != target]
     elif op == "objective":
         target = str(body.get("id", ""))
         text = str(body.get("text", "")).strip()
-        if not text or len(text) > 80:
+        if not text or len(text) > QUEST_TEXT:
             raise ValueError("text")
         found = False
         for quest in quests:
