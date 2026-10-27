@@ -540,6 +540,23 @@ def mutate_quests(body: dict) -> list[dict]:
                 found = True
         if not found:
             raise ValueError("id")
+    elif op == "obj":
+        target = str(body.get("id", ""))
+        try:
+            index = int(body.get("index"))
+        except (TypeError, ValueError):
+            raise ValueError("index")
+        found = False
+        for quest in quests:
+            if quest["id"] != target:
+                continue
+            items = quest.setdefault("objectives", [])
+            if index < 0 or index >= len(items):
+                raise ValueError("index")
+            items[index]["done"] = not items[index].get("done")
+            found = True
+        if not found:
+            raise ValueError("id")
     else:
         raise ValueError("op")
     save_quests(quests)

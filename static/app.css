@@ -225,6 +225,14 @@ main { flex: 1; min-height: 0; overflow: auto; }
   line-height: 1.45;
   overflow: auto;
 }
+.detail button.obj {
+  display: block;
+  width: 100%;
+  text-align: left;
+  min-height: 36px;
+  padding: 6px 0;
+  border-bottom: 1px solid #14381f;
+}
 .detail h3 {
   margin: 0 0 8px;
   font-weight: 400;

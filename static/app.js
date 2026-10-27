@@ -201,7 +201,8 @@ function questView() {
       <span>${quest.done ? "☐" : "▣"} ${esc(quest.name)}</span>
     </button>`).join("");
   const quest = state.quests.find((item) => item.id === state.questId);
-  const objectives = (quest.objectives || []).map((item) => `<div>▸ ${esc(item.text)}</div>`).join("") || `<p>NO OBJECTIVES.</p>`;
+  const objectives = (quest.objectives || []).map((item, index) => `
+    <button type="button" class="obj${item.done ? " dim" : ""}" data-obj="${index}" data-quest-id="${esc(quest.id)}">${item.done ? "☐" : "▸"} ${esc(item.text)}</button>`).join("") || `<p>NO OBJECTIVES.</p>`;
   return `
     <div class="split">
       <div class="list">${list}</div>
@@ -384,6 +385,7 @@ document.body.addEventListener("click", async (event) => {
   const quest = event.target.closest("[data-quest]");
   const toggle = event.target.closest("[data-toggle]");
   const remove = event.target.closest("[data-remove]");
+  const obj = event.target.closest("[data-obj]");
   const tune = event.target.closest("[data-tune]");
   const listen = event.target.closest("[data-listen]");
   if (mode) {
@@ -421,6 +423,14 @@ document.body.addEventListener("click", async (event) => {
     });
     state.quests = data.quests;
     if (!state.quests.some((item) => item.id === state.questId)) state.questId = state.quests[0]?.id || null;
+    draw();
+  } else if (obj) {
+    const data = await api("/api/quests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "obj", id: obj.dataset.questId, index: Number(obj.dataset.obj) }),
+    });
+    state.quests = data.quests;
     draw();
   } else if (tune) {
     const next = Math.round((state.radio.freq + Number(tune.dataset.tune)) * 10) / 10;
