@@ -15,6 +15,8 @@ const PLACES = {
 
 let map = null;
 let marker = null;
+let tileLayer = null;
+let tileSetId = "";
 let follow = true;
 let mapScope = "";
 
@@ -30,6 +32,7 @@ const state = {
   questId: null,
   gps: null,
   radio: null,
+  maps: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -241,18 +244,74 @@ function destroyMap() {
     map = null;
     marker = null;
   }
+  tileLayer = null;
+  tileSetId = "";
   mapScope = "";
+}
+
+function mapScopeName() {
+  return state.sub === "WORLD" ? "world" : "local";
+}
+
+function currentSetId() {
+  const id = state.maps && state.maps[mapScopeName()];
+  const sets = (state.maps && state.maps.sets) || [];
+  if (sets.some((item) => item.id === id)) return id;
+  return "street";
+}
+
+function mapSpec() {
+  const id = currentSetId();
+  const sets = (state.maps && state.maps.sets) || [];
+  return sets.find((item) => item.id === id) || {
+    id: "street",
+    label: "STREET",
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  };
+}
+
+function mapSetButtons() {
+  const sets = (state.maps && state.maps.sets) || [
+    { id: "street", label: "STREET" },
+    { id: "topo", label: "TOPO" },
+    { id: "sat", label: "SAT" },
+    { id: "hill", label: "HILL" },
+  ];
+  const current = currentSetId();
+  return sets.map((item) =>
+    `<button type="button" data-map-set="${esc(item.id)}" class="${item.id === current ? "on" : ""}">${esc(item.label)}</button>`
+  ).join("");
 }
 
 function mapView() {
   return `
     <div class="map-page">
-      <div id="map"></div>
+      <div class="map-stage">
+        <div class="map-sets">${mapSetButtons()}</div>
+        <div id="map"></div>
+      </div>
       <div class="map-bar">
         <span id="map-meta">${esc(gpsLine(state.gps))}</span>
         <button type="button" data-recenter>CENTER</button>
       </div>
     </div>`;
+}
+
+function ensureTiles() {
+  if (!map) return;
+  const spec = mapSpec();
+  if (tileLayer && tileSetId === spec.id) return;
+  if (tileLayer) {
+    map.removeLayer(tileLayer);
+    tileLayer = null;
+  }
+  tileSetId = spec.id;
+  tileLayer = L.tileLayer(`/tiles/${spec.id}/{z}/{x}/{y}.png`, {
+    maxZoom: 19,
+    maxNativeZoom: spec.maxZoom || 19,
+    attribution: spec.attribution || "",
+  }).addTo(map);
 }
 
 function paintMap(world) {
@@ -262,21 +321,22 @@ function paintMap(world) {
   const host = document.getElementById("map");
   if (!host || !gps || gps.lat == null || !(gps.mode >= 2) || typeof L === "undefined") return;
   const zoom = world ? 12 : 17;
+  const scope = world ? "world" : "local";
   if (!map) {
     map = L.map(host, { zoomControl: true, attributionControl: true }).setView([gps.lat, gps.lon], zoom);
-    L.tileLayer("/tiles/{z}/{x}/{y}.png?v=2", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap",
-    }).addTo(map);
     marker = L.marker([gps.lat, gps.lon], {
       icon: L.divIcon({ className: "you-pin-wrap", html: "<i></i>", iconSize: [14, 14], iconAnchor: [7, 7] }),
       keyboard: false,
     }).addTo(map);
     map.on("dragstart", () => { follow = false; });
-    mapScope = world ? "world" : "local";
-  } else if ((world ? "world" : "local") !== mapScope) {
+    mapScope = scope;
+    ensureTiles();
+  } else if (scope !== mapScope) {
     map.setZoom(zoom);
-    mapScope = world ? "world" : "local";
+    mapScope = scope;
+    ensureTiles();
+  } else {
+    ensureTiles();
   }
   marker.setLatLng([gps.lat, gps.lon]);
   if (follow) map.panTo([gps.lat, gps.lon], { animate: false });
@@ -364,6 +424,14 @@ function armPoll() {
 }
 
 async function enter() {
+  const mapping = state.mode === "data" && (state.sub === "LOCAL" || state.sub === "WORLD");
+  if (mapping && !state.maps) {
+    try {
+      state.maps = await api("/api/maps");
+    } catch (err) {
+      state.maps = null;
+    }
+  }
   draw();
   try {
     if (state.mode === "stat") await loadStatus();
@@ -388,6 +456,7 @@ document.body.addEventListener("click", async (event) => {
   const obj = event.target.closest("[data-obj]");
   const tune = event.target.closest("[data-tune]");
   const listen = event.target.closest("[data-listen]");
+  const pick = event.target.closest("[data-map-set]");
   if (mode) {
     state.mode = mode.dataset.mode;
     state.sub = MODES[state.mode][0];
@@ -441,6 +510,17 @@ document.body.addEventListener("click", async (event) => {
       body: JSON.stringify({ freq, play: state.radio.playing }),
     });
     draw();
+  } else if (pick) {
+    if (pick.dataset.mapSet === currentSetId()) return;
+    const scope = mapScopeName();
+    state.maps = await api("/api/maps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, set: pick.dataset.mapSet }),
+    });
+    ensureTiles();
+    const box = document.querySelector(".map-sets");
+    if (box) box.innerHTML = mapSetButtons();
   } else if (event.target.closest("[data-recenter]")) {
     follow = true;
     if (map && state.gps && state.gps.lat != null) {

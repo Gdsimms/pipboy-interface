@@ -18,6 +18,6 @@ Then open http://127.0.0.1:8080 . On the Pi, bind the LAN so another machine can
 python3 server.py --host 0.0.0.0
 ```
 
-Quests are stored in `~/.local/share/pipboy/quests.json`. A u-blox receiver on `/dev/ttyACM0` is read as NMEA. Map tiles come from OpenStreetMap, are cached under `~/.cache/pipboy/tiles`, and are graded green in the page. FM plays from the RTL-SDR at `/dev/swradio0` through the USB sound card. `deploy/kiosk.sh` opens the page fullscreen on the Wayland session. Alt+F4 closes it and leaves the desktop.
+Quests are stored in `~/.local/share/pipboy/quests.json`. A u-blox receiver on `/dev/ttyACM0` is read as NMEA. LOCAL and WORLD each keep their own map tiles: street (OpenStreetMap), topo (OpenTopoMap), satellite (Esri), or hillshade (Esri). The choice is stored in `~/.local/share/pipboy/maps.json`. Tiles are cached under `~/.cache/pipboy/tiles` and graded green in the page. FM plays from the RTL-SDR at `/dev/swradio0` through the USB sound card. `deploy/kiosk.sh` opens the page fullscreen on the Wayland session. Alt+F4 closes it and leaves the desktop.
 
 The interface is original. Share Tech Mono is included under the SIL Open Font License; see `static/fonts/OFL.txt`.

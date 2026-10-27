@@ -29,6 +29,7 @@ STATIC = ROOT / "static"
 WBFM = ROOT / "deploy" / "wbfm"
 DATA_DIR = Path.home() / ".local" / "share" / "pipboy"
 QUESTS_PATH = DATA_DIR / "quests.json"
+MAPS_PATH = DATA_DIR / "maps.json"
 QUEST_TEXT = 400
 HOST = socket.gethostname().split(".")[0].upper()
 
@@ -863,31 +864,125 @@ class Radio:
 
 
 TILE_ROOT = Path.home() / ".cache" / "pipboy" / "tiles"
-TILE_UPSTREAM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+# Esri tile paths are {z}/{y}/{x}. The others are {z}/{x}/{y}.
+TILE_SETS = {
+    "street": {
+        "label": "STREET",
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "attribution": "&copy; OpenStreetMap contributors",
+        "max_zoom": 19,
+    },
+    "topo": {
+        "label": "TOPO",
+        "url": "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+        "attribution": "&copy; OpenStreetMap contributors, SRTM &copy; OpenTopoMap (CC-BY-SA)",
+        "max_zoom": 17,
+    },
+    "sat": {
+        "label": "SAT",
+        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "attribution": "Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+        "max_zoom": 19,
+    },
+    "hill": {
+        "label": "HILL",
+        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+        "attribution": "Sources: Esri, USGS, NASA, and the GIS User Community",
+        "max_zoom": 19,
+    },
+}
+MAP_SCOPES = ("local", "world")
 
 
-def tile_bytes(z: int, x: int, y: int) -> bytes:
-    if not 0 <= z <= 19:
+def map_catalog() -> list[dict]:
+    return [
+        {
+            "id": key,
+            "label": spec["label"],
+            "maxZoom": spec["max_zoom"],
+            "attribution": spec["attribution"],
+        }
+        for key, spec in TILE_SETS.items()
+    ]
+
+
+def load_map_choice() -> dict:
+    chosen = {"local": "street", "world": "street"}
+    try:
+        raw = json.loads(MAPS_PATH.read_text())
+    except (OSError, json.JSONDecodeError):
+        raw = {}
+    if isinstance(raw, dict):
+        for scope in MAP_SCOPES:
+            value = raw.get(scope)
+            if value in TILE_SETS:
+                chosen[scope] = value
+    return {"local": chosen["local"], "world": chosen["world"], "sets": map_catalog()}
+
+
+def save_map_choice(body: dict) -> dict:
+    scope = body.get("scope")
+    set_id = body.get("set")
+    if scope not in MAP_SCOPES or set_id not in TILE_SETS:
+        raise ValueError("map")
+    current = load_map_choice()
+    stored = {"local": current["local"], "world": current["world"], scope: set_id}
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    MAPS_PATH.write_text(json.dumps(stored, indent=2) + "\n")
+    return load_map_choice()
+
+
+def tile_cache_base(set_id: str, z: int, x: int, y: int) -> Path:
+    # Street tiles stay in the original cache layout so fetched OSM tiles are reused.
+    if set_id == "street":
+        return TILE_ROOT / str(z) / str(x) / str(y)
+    return TILE_ROOT / set_id / str(z) / str(x) / str(y)
+
+
+def cached_tile(base: Path) -> tuple[bytes, str] | None:
+    for ext, mime in ((".png", "image/png"), (".jpg", "image/jpeg")):
+        path = Path(str(base) + ext)
+        if not path.is_file() or path.stat().st_size <= 64:
+            continue
+        data = path.read_bytes()
+        if data.startswith(b"\x89PNG") or data.startswith(b"\xff\xd8\xff"):
+            return data, mime
+    return None
+
+
+def tile_bytes(set_id: str, z: int, x: int, y: int) -> tuple[bytes, str]:
+    spec = TILE_SETS.get(set_id)
+    if spec is None:
+        raise ValueError("set")
+    if not 0 <= z <= spec["max_zoom"]:
         raise ValueError("zoom")
     limit = 2 ** z
     if not 0 <= x < limit or not 0 <= y < limit:
         raise ValueError("tile")
-    path = TILE_ROOT / str(z) / str(x) / f"{y}.png"
-    if path.exists() and path.stat().st_size > 64:
-        return path.read_bytes()
+    base = tile_cache_base(set_id, z, x, y)
+    hit = cached_tile(base)
+    if hit:
+        return hit
     request = urllib.request.Request(
-        TILE_UPSTREAM.format(z=z, x=x, y=y),
+        spec["url"].format(z=z, x=x, y=y),
         headers={"User-Agent": "PIP-OS/0.2 (personal pip-boy)"},
     )
     with urllib.request.urlopen(request, timeout=8) as response:
         data = response.read()
-    if not data.startswith(b"\x89PNG"):
+    if len(data) > 2_000_000:
         raise ValueError("tile")
+    if data.startswith(b"\x89PNG"):
+        ext, mime = ".png", "image/png"
+    elif data.startswith(b"\xff\xd8\xff"):
+        ext, mime = ".jpg", "image/jpeg"
+    else:
+        raise ValueError("tile")
+    path = Path(str(base) + ext)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".part")
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex}.part")
     tmp.write_bytes(data)
     tmp.replace(path)
-    return data
+    return data, mime
 
 
 def apply_gps(snap: dict, gps: dict) -> None:
@@ -923,8 +1018,14 @@ class Handler(BaseHTTPRequestHandler):
                 snap = SAMPLER.status()
                 apply_gps(snap, GPS.snapshot())
                 self._json(snap)
-            elif (tile := re.fullmatch(r"/tiles/(\d+)/(\d+)/(\d+)\.png", path)):
-                self._tile(int(tile.group(1)), int(tile.group(2)), int(tile.group(3)))
+            elif (tile := re.fullmatch(r"/tiles/(?:([a-z]+)/)?(\d+)/(\d+)/(\d+)\.png", path)):
+                set_id = tile.group(1) or "street"
+                if set_id not in TILE_SETS:
+                    self._json({"error": "missing"}, 404)
+                else:
+                    self._tile(set_id, int(tile.group(2)), int(tile.group(3)), int(tile.group(4)))
+            elif path == "/api/maps":
+                self._json(load_map_choice())
             elif path == "/api/files":
                 self._json(list_dir(FILE_ROOT, query.get("path", [""])[0]))
             elif path == "/api/files/text":
@@ -956,6 +1057,8 @@ class Handler(BaseHTTPRequestHandler):
                 freq = float(body.get("freq", RADIO.freq))
                 play = bool(body.get("play"))
                 self._json(RADIO.command(freq, play))
+            elif parsed.path == "/api/maps":
+                self._json(save_map_choice(body))
             else:
                 self._json({"error": "missing"}, 404)
         except ValueError:
@@ -983,9 +1086,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _tile(self, z: int, x: int, y: int) -> None:
+    def _tile(self, set_id: str, z: int, x: int, y: int) -> None:
         try:
-            data = tile_bytes(z, x, y)
+            data, mime = tile_bytes(set_id, z, x, y)
         except (urllib.error.URLError, TimeoutError, ValueError, OSError):
             self.send_response(502)
             self.send_header("Content-Length", "0")
@@ -993,7 +1096,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         self.send_response(200)
-        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "public, max-age=86400")
         self.end_headers()
