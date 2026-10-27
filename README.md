@@ -1,4 +1,4 @@
-# PIP-OS
+# PIP-OS 0.2
 
 A green phosphor interface for the Raspberry Pi, in the shape of a Fallout 3 / New Vegas Pip-Boy 3000. The screen has three modes:
 

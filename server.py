@@ -877,7 +877,7 @@ def tile_bytes(z: int, x: int, y: int) -> bytes:
         return path.read_bytes()
     request = urllib.request.Request(
         TILE_UPSTREAM.format(z=z, x=x, y=y),
-        headers={"User-Agent": "PIP-OS/0.1 (personal pip-boy)"},
+        headers={"User-Agent": "PIP-OS/0.2 (personal pip-boy)"},
     )
     with urllib.request.urlopen(request, timeout=8) as response:
         data = response.read()
@@ -909,7 +909,7 @@ FILE_ROOT = Path.home()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PIP-OS/0.1"
+    server_version = "PIP-OS/0.2"
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"[pip] {self.address_string()} {fmt % args}")
